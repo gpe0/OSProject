@@ -22,6 +22,35 @@ ssize_t fdReadySize(int fd) {
     return size;
 }
 
+int newSize(const char* str, char* oldWords[],
+                  char* newWords[], int n)
+{
+	int newSz = 0;
+	
+	for (int i = 0; i < n; i++) {
+		
+		int count = 0;
+ 
+		int newWordlen = strlen(newWords[i]);
+		int oldWordlen = strlen(oldWords[i]);
+		
+	  
+		for (int j = 0; str[j] != '\0'; j++) {
+			if (strstr(&str[j], oldWords[i]) == &str[j]) {
+				count++;
+				
+				j += oldWordlen - 1;
+			}
+		}
+  
+		newSz += count * (newWordlen - oldWordlen);
+		
+	}
+	
+	return strlen(str) + newSz;
+    
+}
+
 int numOfLines(char * filename) {
 	FILE * file = fopen(filename, "r");
 	int res = 0;
@@ -88,42 +117,11 @@ void replaceWord(char* str, char* oldWords[],
     free(result);
 }
 
-int newSize(const char* str, char* oldWords[],
-                  char* newWords[], int n)
-{
-	int newSz = 0;
-	
-	for (int i = 0; i < n; i++) {
-		
-		int count = 0;
- 
-		int newWordlen = strlen(newWords[i]);
-		int oldWordlen = strlen(oldWords[i]);
-		
-	  
-		for (int j = 0; str[j] != '\0'; j++) {
-			if (strstr(&str[j], oldWords[i]) == &str[j]) {
-				count++;
-				
-				j += oldWordlen - 1;
-			}
-		}
-  
-		newSz += count * (newWordlen - oldWordlen);
-		
-	}
-	
-	return strlen(str) + newSz;
-    
-}
-
 
 int main(int argc, char* argv[]) {
 	
 	int input[2];
 	int output[2];
-	ssize_t inputSize = fdReadySize(STDIN_FILENO);
-	char *text = malloc(inputSize * sizeof(char));
 	
 	if (pipe(input) < 0) {
 		perror("pipe error");
@@ -144,18 +142,13 @@ int main(int argc, char* argv[]) {
 		//Parent Process
 		close(input[READ_END]);
 		close(output[WRITE_END]);	
-			
-		
+
 		char ch;
 		int i = 0;
 		while(read(STDIN_FILENO, &ch, 1) > 0) {
-			text[i] = ch;
-			i++;
-		}
-		text[i - 1] = '\0';
-		
-		if (write(input[WRITE_END], text, inputSize) < 0) {
-			fprintf(stderr, "Unable to write to pipe: %s\n", strerror(errno));
+			if (write(input[WRITE_END], &ch, 1) < 0) {
+				fprintf(stderr, "Unable to write to pipe: %s\n", strerror(errno));
+			}
 		}
 		
 		close(input[WRITE_END]);
@@ -176,10 +169,15 @@ int main(int argc, char* argv[]) {
 		//Child Process
 		close(input[WRITE_END]);
 		close(output[READ_END]);
-		
-		if (read(input[READ_END], text, inputSize) < 0 ) {
-			fprintf(stderr, "Unable to read from pipe: %s\n", strerror(errno));
+		char ch;
+		int size = 0;
+		char *text;
+		while (read(input[READ_END], &ch, 1) > 0) {
+			size++;
+			text = (char *) realloc(text, size * sizeof(char));
+			text[size-1] = ch; 
 		}
+
 		close(input[READ_END]);
 		
 		int lines = numOfLines("cypher.txt") * 2;
@@ -214,7 +212,7 @@ int main(int argc, char* argv[]) {
 		
 		
 		str_size = newSize(text, wordsFrom, wordsTo, lines);
-		text = realloc(text, str_size);
+		text = (char *) realloc(text, str_size);
 		replaceWord(text, wordsFrom, wordsTo, lines);
 			
 		for (int i = 0; i < lines; i++) {
